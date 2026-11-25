@@ -11,6 +11,7 @@ const PORT = Number(process.env.PORT || 8765);
 const BASE_URL = (process.env.ANYTHINGLLM_URL || "").replace(/\/+$/, "");
 const API_KEY = process.env.ANYTHINGLLM_API_KEY || "";
 const WORKSPACE_SLUG = process.env.ANYTHINGLLM_WORKSPACE_SLUG || "";
+const CHAT_MODE = process.env.ANYTHINGLLM_CHAT_MODE || "automatic";
 
 const MAX_JSON_BYTES = 32 * 1024 * 1024;
 const MAX_ATTACHMENTS = 10;
@@ -127,7 +128,7 @@ async function chat(request, response) {
 
     const payload = {
       message: prepareChatMessage(message),
-      mode: "automatic",
+      mode: CHAT_MODE,
       sessionId,
     };
     if (attachments.length) {
@@ -165,7 +166,8 @@ async function chat(request, response) {
 
     const files = collectReplyFiles(data);
     let textResponse =
-      typeof data.textResponse === "string" ? data.textResponse.trim() : "";
+      typeof data.textResponse === "string" ? data.textResponse.replace(/<think>[\s\S]*?<\/think>/gi, "").trim()
+        : "";
 
     if (!files.length && wantsGeneratedFile(message)) {
       const generated = makeDownloadableFile(message, textResponse);
