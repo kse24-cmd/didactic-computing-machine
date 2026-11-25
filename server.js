@@ -1,10 +1,12 @@
 const http = require("node:http");
 const fs = require("node:fs");
 const path = require("node:path");
+const { randomUUID } = require("node:crypto");
 
 const ROOT = __dirname;
 loadEnv(path.join(ROOT, ".env"));
 
+const HOST = process.env.HOST || "127.0.0.1";
 const PORT = Number(process.env.PORT || 8765);
 const BASE_URL = (process.env.ANYTHINGLLM_URL || "").replace(/\/+$/, "");
 const API_KEY = process.env.ANYTHINGLLM_API_KEY || "";
@@ -76,14 +78,16 @@ async function checkAnythingLlm(response) {
   }
 
   try {
-    const upstream = await fetchWithTimeout(`${BASE_URL}/api/v1/auth`, {
+    const upstream = await fetchWithTimeout(`${BASE_URL}/api/v1/workspace/${encodeURIComponent(WORKSPACE_SLUG)}`, {
       headers: { Authorization: `Bearer ${API_KEY}` },
     }, 15_000);
 
     if (!upstream.ok) {
       return sendJson(response, 503, {
         connected: false,
-        error: authError(upstream.status),
+        error: upstream.status === 401 || upstream.status === 403
+          ? authError(upstream.status)
+          : "AnythingLLM 워크스페이스 연결을 확인해 주세요.",
       });
     }
 
@@ -111,7 +115,7 @@ async function chat(request, response) {
     const sessionId =
       typeof body.sessionId === "string" && body.sessionId.trim()
         ? body.sessionId.trim().slice(0, 128)
-        : "plant-observation";
+        : randomUUID();
 
     if (!message && attachments.length) {
       message = defaultMessageFor(attachments);
@@ -364,15 +368,14 @@ async function proxyGeneratedFile(request, response) {
   }
 
   let parsed;
+  let storageName;
   try {
     parsed = new URL(request.url, "http://127.0.0.1");
+    storageName = safeStorageName(decodeURIComponent(parsed.pathname.slice("/api/files/".length)));
   } catch {
     return sendJson(response, 400, { error: "잘못된 요청입니다." });
   }
 
-  const storageName = safeStorageName(
-    decodeURIComponent(parsed.pathname.slice("/api/files/".length)),
-  );
   if (!storageName) {
     return sendJson(response, 400, { error: "잘못된 파일 이름입니다." });
   }
@@ -780,6 +783,6 @@ server.on("error", (error) => {
   process.exit(1);
 });
 
-server.listen(PORT, "127.0.0.1", () => {
-  console.log(`식물 관찰 학습: http://127.0.0.1:${PORT}`);
+server.listen(PORT, HOST, () => {
+  console.log(`식물 관찰 학습: http://${HOST}:${PORT}`);
 });
